@@ -1,3 +1,8 @@
+## Example usage with PrusaSlicer>=2.4
+```
+cat "${1}" | gpx -i -B "$(basename -- "${SLIC3R_PP_OUTPUT_NAME%.*}")" | sponge "${1}"
+```
+
 # GPX
 
 GPX was created by Dr. Henry Thomas (aka Wingcommander) in April 2013
@@ -84,6 +89,7 @@ Options:
 	  	tail (end build notice), or both
 	-d	simulated ditto printing
 	-g	Makerbot/ReplicatorG GCODE flavor
+	-B...	Set custom buildname
 	-i	enable stdin and stdout support for command line pipes
 	-l	log to file
 	-p	override build percentage

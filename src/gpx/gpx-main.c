@@ -47,6 +47,23 @@ static int sio_port = -1;
 static char temp_config_name[24];
 
 // cleanup code in case we encounter an error that causes the program to exit
+static char *gpx_buildname(const char *filename)
+{
+    char *out = strrchr(filename, PATH_DELIM);
+
+#ifdef _WIN32
+    char *otherdelim = strrchr(filename, '/');
+    if (otherdelim > out) out = otherdelim;
+#endif
+
+    out = strdup(out ? (out + 1) : filename);
+    if (out == NULL) return NULL;
+
+    char *dot = strrchr(out, '.');
+    if (dot) *dot = 0;
+
+    return out;
+}
 
 static void exit_handler(void)
 {
@@ -136,6 +153,7 @@ static void usage(int err)
 	fputs("\t  \tbefore reading or writing (default is 2 seconds)" EOL, fp);
     fputs("\t-d\tsimulated ditto printing" EOL, fp);
     fputs("\t-g\tMakerbot/ReplicatorG GCODE flavor" EOL, fp);
+    fputs("\t-B...\tSet custom buildname" EOL, fp);
     fputs("\t-i\tenable stdin and stdout support for command line pipes" EOL, fp);
     fputs("\t-l\tlog to file" EOL, fp);
     fputs("\t-L\tlog to named [LOGFILE] file" EOL, fp);
@@ -352,7 +370,7 @@ int main(int argc, char * const argv[])
     char *config = NULL;
     char *eeprom = NULL;
     double filament_diameter = 0;
-    char *buildname = PACKAGE_STRING;
+    char *buildname = NULL;
     char *logname = NULL;
     char *filename;
     speed_t baud_rate = B115200;
@@ -377,7 +395,7 @@ int main(int argc, char * const argv[])
     // the ini file from the default locations and whether to be verbose about it
     // we need to load the ini file before parsing the rest so that the command line
     // overrides the default ini in the standard case
-    while ((c = getopt(argc, argv, "CD:E:FIL:N:W:b:c:de:gf:ilm:n:pqrstu:vwx:y:z:?")) != -1) {
+    while ((c = getopt(argc, argv, "CD:E:FIL:N:W:b:B:c:de:gf:ilm:n:pqrstu:vwx:y:z:?")) != -1) {
         switch (c) {
             case 'I':
                 ignore_default_ini = 1;
@@ -414,7 +432,7 @@ int main(int argc, char * const argv[])
     // error message should they be attempted when the code
     // is compiled without serial I/O support.
 
-    while ((c = getopt(argc, argv, "CD:E:FIL:N:W:b:c:de:gf:ilm:n:pqrstu:vwx:y:z:?")) != -1) {
+    while ((c = getopt(argc, argv, "CD:E:FIL:N:W:b:B:c:de:gf:ilm:n:pqrstu:vwx:y:z:?")) != -1) {
         switch (c) {
 	    case 'C':
 		 // Write config data to a temp file
@@ -507,6 +525,9 @@ int main(int argc, char * const argv[])
                 serial_io = 1;
                 gpx.flag.framingEnabled = 1;
 #endif
+                break;
+            case 'B':
+                buildname = optarg;
                 break;
             case 'c':
                 config = optarg;
@@ -718,20 +739,8 @@ int main(int argc, char * const argv[])
             perror("Error opening input");
 	    goto done;
         }
-        // assign build name
-        buildname = strrchr(filename, PATH_DELIM);
-#ifdef _WIN32
-        char *otherdelim = strrchr(filename, '/');
-        if (otherdelim > buildname)
-        {
-            buildname = otherdelim;
-        }
-#endif
-        if(buildname) {
-            buildname++;
-        }
-        else {
-            buildname = filename;
+        if (buildname == NULL) {
+            buildname = gpx_buildname(filename);
         }
 
         argc--;
@@ -740,15 +749,9 @@ int main(int argc, char * const argv[])
         if(argc > 0) {
             filename = argv[0];
             // prefer output filename over input for the buildname
-            char *s = strrchr(filename, PATH_DELIM);
-#ifdef _WIN32
-            otherdelim = strrchr(filename, '/');
-            if (otherdelim > s)
-                s = otherdelim;
-#endif
-            s = strdup(s ? s+1 : filename);
-            if (s)
-                buildname = s;
+            if (buildname == NULL) {
+                buildname = gpx_buildname(filename);
+            }
         }
         else {
             if(serial_io) {
@@ -782,10 +785,6 @@ int main(int argc, char * const argv[])
                 strcpy(ext, ".x3g");
             }
         }
-
-        // trim build name extension
-        char *dot = strrchr(buildname, '.');
-        if(dot) *dot = 0;
 
         if(serial_io) {
             sio_open(filename, baud_rate);
@@ -871,7 +870,7 @@ int main(int argc, char * const argv[])
         else {
             // READ INPUT AND SEND OUTPUT TO PRINTER
 
-	    gpx_start_convert(&gpx, buildname, force_framing, 0);
+	    gpx_start_convert(&gpx, buildname ? buildname : PACKAGE_STRING, force_framing, 0);
             rval = gpx_convert_and_send(&gpx, file_in, sio_port, force_framing, 0);
             gpx_end_convert(&gpx);
         }
@@ -879,7 +878,7 @@ int main(int argc, char * const argv[])
     else {
         // READ INPUT AND CONVERT TO OUTPUT
 
-	gpx_start_convert(&gpx, buildname, force_framing, 0);
+	gpx_start_convert(&gpx, buildname ? buildname : PACKAGE_STRING, force_framing, 0);
         rval = gpx_convert(&gpx, file_in, file_out, file_out2);
         gpx_end_convert(&gpx);
     }
